@@ -53,36 +53,40 @@ const generatePoses = ()=>{
     <>
      <Toaster position="top-right" />
 
-    <section className="p-8 bg-[url(/anime-style-mythical-dragon-creature.jpg)] flex justify-center items-center w-full h-screen bg-cover bg-center bg-no-repeat">
+    <section className="p-8 bg-[url(/859013-anime-attack-on-titan-green-live-wallpaper.jpg)] flex justify-center items-center w-full h-screen bg-cover bg-center bg-no-repeat">
       
       <div className="bg-white/30 w-[1980px] h-[700px] rounded-2xl flex flex-col items-center">
         
-            <div className="flex w-[100%] h-[20%] justify-center">
-              {animefy.loading && 
-                     <div className="w-[10%]">
-                         <DotLottieReact
-                   src="https://lottie.host/ae57be7c-b080-49bf-bdcf-a292dd7d9dac/F275oCskAs.lottie"
-                   loop
-                   autoplay
-                 />
-            </div>}
-             <div className=" h-[100%] w-[80%] flex justify-center items-center">
-                <p className=" bg-[#2f9e44] p-5 w-[70%] flex justify-center rounded-xl text-5xl">Create Your own Character</p>
-             </div>
-             <div className="w-[10%] h-full flex items-center justify-center">
-               <button className=" bg-[#2f9e44] p-2 pl-4 pr-4  text-white border-white border-4 rounded-xl text-lg " onClick={handleLogout}>logout</button>
-             </div>
-      </div>
-             <div className="flex justify-center h-[80%] w-[100%] gap-20">
-                    <div className="h-[90%] w-[50%] items-center flex flex-col  gap-10">
-                     <div className="flex w-full gap-5 justify-center">
-                    <button  className="bg-[#2f9e44] text-white border-white [30%] p-2 pl-3 pr-3 border-4 rounded-xl text-lg "  onClick={()=>{router.push("/")}}>Home</button>
-                    <button  className="bg-[#40c057]/70 text-white border-white/70 w-[40%] p-2 border-4 rounded-xl text-lg " disabled onClick={()=>{router.push("/generateCharacter")}}>Character Generator</button>
-                    {animefy.anime_image && 
-                    <button  className="bg-[#2f9e44] text-white border-white  w-[30%] p-2 border-4 rounded-xl text-lg "  onClick={()=>{router.push("/generatePanel")}}>Panel Generator</button>
-                     }
-                    </div>
-                    <div  className="bg-[#2f9e44] w-full p-4 h-[70%] rounded-xl border-dashed border-4 flex flex-col items-center justify-center">
+<div className="grid grid-cols-2 items-center gap-4 w-full h-[15%] p-4">
+  
+  {/* LEFT SIDE: Title */}
+  <div className="flex justify-start">
+    <p className="bg-[#2f9e44] px-6 py-3 rounded-xl text-3xl text-white">
+      Create Your Own Character
+    </p>
+  </div>
+
+  {/* RIGHT SIDE: Navigation Buttons */}
+  <div className="flex justify-end gap-4">
+    <button className="bg-[#2f9e44] text-white border-white border-2 px-4 py-2 rounded-lg text-md" onClick={() => router.push("/")}>
+      Home
+    </button>
+    <button className="bg-white text-[#2f9e44] border-[#2f9e44] border-3 px-4 py-2 rounded-lg text-md" disabled>
+      Character
+    </button>
+    <button className="bg-[#2f9e44] text-white border-white border-2 px-4 py-2 rounded-lg text-md" onClick={() => router.push("/generatePanel")}>
+      Panel
+    </button>
+    <button className="bg-[#2f9e44] text-white border-white border-2 px-4 py-2 rounded-lg text-md" onClick={handleLogout}>
+      Logout
+    </button>
+  </div>
+
+</div>
+
+             <div className="flex justify-center items-center h-[100%] w-[100%] gap-5">
+                             <div className="h-[100%] w-[30%] flex justify-center items-center flex-col gap-3">
+                    <div  className="bg-[#2f9e44] w-full gap-4 h-[50%] rounded-xl border-dashed border-4 flex flex-col items-center justify-center">
                       
                       <div {...getRootProps()} className="flex items-center flex-col">
                         <input {...getInputProps()} />
@@ -92,16 +96,27 @@ const generatePoses = ()=>{
                        <input ref={fileInputRef} type="file" onChange={(e) => setSelectedFile(e.target.files[0])} className="hidden"/>                   
                          
                          <button type="button" className="bg-[#40c057] w-25 rounded-lg border-4 text-lg text-white" onClick={handleClick}>upload</button>
-                         
-                    </div>
                    
                     </div>
-                      {animefy.anime_image && 
-                       <div className="flex flex-col gap-10 w-[20%]  h-[100%] rounded-2xl">
-                         <img className="rounded-2xl w-full h-[70%] object-cover" src={animefy.anime_image} alt="user image" />
-                          <button className="bg-[#2f9e44] p-4 border-5 rounded-xl text-xl " onClick={generatePoses}>Confirm your Character</button>
+                    <div className="w-[30%] h-[25%]">
+                     {animefy.loading && 
+                     <div className="w-full h-full">
+                         <DotLottieReact
+                   src="https://lottie.host/ae57be7c-b080-49bf-bdcf-a292dd7d9dac/F275oCskAs.lottie"
+                   loop
+                   autoplay
+                 />
+                 </div>
+              
+                     }
                        </div>
-                      }
+                    </div>
+                    {animefy.anime_image && 
+                       <div className="flex flex-col justify-center gap-2 w-[20%] h-[100%] rounded-2xl">
+                         <img className="rounded-2xl w-full h-[70%] object-cover" src={animefy.anime_image} alt="user image" />
+                          <button className="bg-[#2f9e44] p-2 border-4 rounded-xl text-lg " onClick={generatePoses}>Confirm your Character</button>
+                       </div>
+                    }
              </div>
       </div>
     </section>
