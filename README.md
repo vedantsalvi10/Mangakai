@@ -35,17 +35,6 @@ MangaKai lets you write a short story, and it generates a cinematic manga panel 
 
 ## 🛠️ How It Works
 
-```mermaid
-flowchart TD
-  A[User writes a manga panel story] --> B[GPT parses it into prompt JSON]
-  B --> C{Workflow Decision}
-  C -->|1 Character| D1[run_panel_workflow1.py]
-  C -->|2 Characters| D2[run_panel_workflow2.py]
-  C -->|Crowd/Group| D3[run_group_workflow.py]
-  D1 & D2 & D3 --> E[ComfyUI: image generation]
-  E --> F[Django saves panel + adds text bubble]
-  F --> G[Panel appears in UI]
-
 
 ## 🧪 Run Locally
 
