@@ -66,7 +66,7 @@ cd mangakai_backend/confyUI/ComfyUI
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 python main.py --listen 
-
+```
 </details> <details> <summary>💻 Frontend (Next.js + Tailwind CSS)</summary>
 
 ```bash
@@ -78,7 +78,7 @@ npm install
 # Run the development server
 npm run dev
 
-
+```
 ---
 ## 🧠 Prompt Engine
 
@@ -97,3 +97,4 @@ Is parsed into this by GPT:
     { "type": "dialogue", "speaker": "Teenage Boy", "text": "I won't run anymore." }
   ]
 }
+```
