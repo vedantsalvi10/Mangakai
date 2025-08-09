@@ -2,6 +2,9 @@ from rest_framework.authtoken.models import Token  # token is to get user and ge
 from rest_framework.decorators import api_view  # to check which type of curl is there
 from rest_framework.response import Response # to give  a response to the frontend
 from rest_framework.decorators import parser_classes
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import authentication_classes, permission_classes
 from django.conf import settings  # this is to get files like media/ output/input/poses
 from animeImage.models import AnimeImage,PoseImage # this are the storage tables where the panels are stored
 from panelGeneration.models import MangaPage
@@ -108,21 +111,14 @@ DO NOT include explanation. Output only valid JSON.
 
 @api_view(['POST'])
 @parser_classes([JSONParser])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def generate_story_prompt(request):
   # set the api key for open ai dtory generation
     API_KEY = os.getenv("API_KEY")
     client = OpenAI(api_key=API_KEY)
     
-  # Get the tokens from the params and use it to get the user 
-    token_key = request.query_params.get("token")
-    if not token_key:
-        return Response({'error': 'Token not provided'}, status=400)
-    try:
-        token = Token.objects.get(key=token_key)
-        user = token.user
-        
-    except Token.DoesNotExist:
-        return Response({'error': 'Invalid token'}, status=401)
+    user= request.user
     
     # get the story from the user
     user_story = request.data.get("story")

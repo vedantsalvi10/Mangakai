@@ -2,6 +2,9 @@ from rest_framework.authtoken.models import Token  # token is to get user and ge
 from rest_framework.decorators import api_view # to check which type of curl is there
 from rest_framework.response import Response # to give a response to the frontend
 from rest_framework.parsers import MultiPartParser
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.decorators import parser_classes
 import subprocess, uuid, os 
 from django.conf import settings # this is to get files like media/ output/input/poses
@@ -53,19 +56,10 @@ poses_map = {
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def animeImage(request):
-    # get the token from the params to get the user and assign the user with input and output image
-    token_key = request.query_params.get('token')
-    
-    if not token_key:
-        return Response({'error': 'Token not provided'}, status=400)
-    
-    try:
-        token = Token.objects.get(key=token_key)
-        user = token.user
-    except Token.DoesNotExist:
-        return Response({'error': 'Invalid token'}, status=401)
-    
+    user = request.user
     # get the input image 
     image_file = request.FILES.get('image')
     if not image_file:
@@ -116,18 +110,10 @@ def animeImage(request):
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def posesGeneration(request):
-
-    # based on the token that the user provided in the params get the anime image that is to be given with the poses
-    token_key = request.query_params.get('token')
-    if not token_key:
-        return Response({'error': 'Token not provided'}, status=400)
-    
-    try:
-        token = Token.objects.get(key=token_key)
-        user = token.user
-    except Token.DoesNotExist:
-        return Response({'error': 'Invalid token'}, status=401)
+    user = request.user
     anime_image = AnimeImage.objects.get(user=user)
     
     # Go through the pose map one by one and give those poses to the comfyUI to generate the images

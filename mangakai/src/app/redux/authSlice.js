@@ -1,4 +1,5 @@
 import { createSlice,createAsyncThunk } from "@reduxjs/toolkit";
+import Cookies from 'js-cookie';
 import axios from '../utils/auth'
 import toast from "react-hot-toast";
 export const authSlice = createSlice({
@@ -97,7 +98,7 @@ export const loginUser = createAsyncThunk(
          'Content-Type': 'application/json',
              }
       });
-      localStorage.setItem("token", res.data.token);
+      Cookies.set('authToken', res.data.token, { expires: 7 });
       toast.success("Logged in Successfully!! ")
       return res.data.token;
     } catch (err) {
@@ -116,7 +117,7 @@ export const registerUser = createAsyncThunk(
           'Content-Type': 'application/json'
   }
       });
-      localStorage.setItem("token", res.data.token);
+      Cookies.set('authToken', res.data.token, { expires: 7 });
       toast.success("User registered successfully ")
       return res.data.token;
     } catch (err) {
@@ -129,11 +130,13 @@ export const registerUser = createAsyncThunk(
 export const animeConversion = createAsyncThunk(
   'animefy/upload',
   async (image, thunkAPI) => {
-    const token = localStorage.getItem("token");
+    const token = Cookies.get('authToken');
     try {
       const res = await axios.post('animefy/', image,{
-             params: { token }, 
-        });
+        headers: {
+          Authorization: `Token ${token}`,
+        },
+      });
         toast.success("Character image created successfully!!")
       return res.data.anime_image_url;
     } catch (err) {
@@ -146,14 +149,16 @@ export const animeConversion = createAsyncThunk(
 export const posesGeneration = createAsyncThunk(
   'animefy/poses',
   async (_, thunkAPI) => {
-    const token = localStorage.getItem("token"); 
+    const token = Cookies.get('authToken');
     try {
       await axios.post(
         'poses/',
         null,
         {
-          params: { token }
-        }
+        headers: {
+          Authorization: `Token ${token}`,
+        },
+      }
       );
       toast.success("Poses Generation Success");
     } catch (err) {
@@ -166,17 +171,16 @@ export const posesGeneration = createAsyncThunk(
 export const generateStory = createAsyncThunk(
   'animefy/story',
   async(story,thunkAPI) =>{
-      const token = localStorage.getItem("token");
+       const token = Cookies.get('authToken');
       try{
         const res = await axios.post(
           'story/',
           {story},
-          {
-            params:{token},
-            headers: {
-              'Content-Type': 'application/json' // 👈 ensure this if needed
-            }
-          }
+           {
+        headers: {
+          Authorization: `Token ${token}`,
+        },
+             }
         );
         toast.success("pannel created successfully!!")
         return res.data.panel_image_url;
