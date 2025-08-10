@@ -11,8 +11,6 @@ from panelGeneration.models import MangaPage
 from django.core.files import File
 from rest_framework.parsers import JSONParser 
 from openai import OpenAI # this is to set open ai model
-from dotenv import load_dotenv # this env environment that is ignored by git(to safe gaurd the api key)
-load_dotenv()
 import json,os,time,uuid,subprocess
 
 SYSTEM_PROMPT = """
@@ -115,7 +113,7 @@ DO NOT include explanation. Output only valid JSON.
 @permission_classes([IsAuthenticated])
 def generate_story_prompt(request):
   # set the api key for open ai dtory generation
-    API_KEY = os.getenv("API_KEY")
+    API_KEY = os.environ.get("API_KEY")
     client = OpenAI(api_key=API_KEY)
     
     user= request.user
