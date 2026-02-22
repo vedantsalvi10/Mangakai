@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import os
 from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,9 +22,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-n3#v6j23n))_9_q@()&h6@w*6)a-p@e=q94kq7l69t&%f!+4&_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
+ALLOWED_HOSTS = ["65.1.132.189","api.mangakai.in"]
 
 
 # Application definition
@@ -84,12 +93,12 @@ WSGI_APPLICATION = 'mangakai.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'mangakai',
-        'USER': 'root',
+        'USER': 'mangakaivedant',
         'PASSWORD': 'Vedant2110',
         'HOST': 'localhost',
-        'PORT': '3306',
+        'PORT': '5432',
     }
 }
 
@@ -124,12 +133,14 @@ USE_I18N = True
 
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True 
+CORS_ALLOWED_ORIGINS = [
+    "https://mangakai.in",
+]
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
