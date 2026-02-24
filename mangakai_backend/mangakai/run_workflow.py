@@ -18,7 +18,7 @@ input_image_path = args.input
 output_image_path = args.output
 
 # ---- STEP 2: Setup Server and Client ID ----
-SERVER_ADDRESS = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+server_address = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 client_id = str(uuid.uuid4())
 
 # ---- STEP 3: ComfyUI API Helper Functions ----

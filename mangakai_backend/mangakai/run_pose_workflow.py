@@ -22,7 +22,21 @@ prompt_text = args.prompt
 output_image_path = args.output
 
 # ---- STEP 2: Setup Server and Client ID ----
-SERVER_ADDRESS = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+
+server_address = os.getenv("COMFYUI_URL")
+
+# Throw error if not set
+if not server_address:
+    raise RuntimeError(
+        "COMFYUI_URL environment variable is not set. "
+        "Set it in your .env file to your ngrok or ComfyUI server URL."
+    )
+
+# Optional: validate format
+if not server_address.startswith(("http://", "https://")):
+    raise ValueError(
+        f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://"
+    )
 client_id = str(uuid.uuid4())
 
 # ---- STEP 3: ComfyUI API Helper Functions ----
