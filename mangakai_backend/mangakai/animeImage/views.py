@@ -10,7 +10,8 @@ import subprocess, uuid, os
 from django.conf import settings # this is to get files like media/ output/input/poses
 from animeImage.models import AnimeImage,PoseImage     # this are the storage tables where the panels are stored
 import time # this is to create the wait time
-
+import tempfile
+from django.core.files import File
 poses_map = {
         'casting':{
             "file":"pose_templates/casting.png",
@@ -18,7 +19,7 @@ poses_map = {
         },
         'talking':{
             "file":"pose_templates/talking.png",
-            "prompt":" anime boy standing confidently on a neon-lit city street at night, casual black hoodie and joggers, hands in pockets, soft shadowing, cinematic lighting, anime scene style, vivid colors",
+            "prompt":" anime b oy standing confidently on a neon-lit city street at night, casual black hoodie and joggers, hands in pockets, soft shadowing, cinematic lighting, anime scene style, vivid colors",
         },
         'looking':{
             "file":"pose_templates/looking.png",
@@ -76,36 +77,35 @@ def animeImage(request):
     animeImage.original_image = image_file
     animeImage.save()
     output_filename = f'{uuid.uuid4()}.png'
-    output_path = os.path.join(settings.MEDIA_ROOT, 'outputs', output_filename)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # 1) Download the uploaded original image locally (S3-safe)
+    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(animeImage.original_image.name)[-1], delete=False) as tmp_in:
+      for chunk in animeImage.original_image.chunks():
+        tmp_in.write(chunk)
+      input_path = tmp_in.name
+    # 2) Create a local output path
+    tmp_out_dir = os.path.join(settings.BASE_DIR, "tmp_outputs")
+    os.makedirs(tmp_out_dir, exist_ok=True)
+    output_path = os.path.join(tmp_out_dir, output_filename)
     
-    # run the worflow and give input image path and store the output image in output image path
+    # 3) Run workflow
     try:
-        subprocess.run([
-            'python', 'run_workflow.py',
-            '--input', animeImage.original_image.path,
-            '--output', output_path
-        ], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ['python', 'run_workflow.py', '--input', input_path, '--output', output_path],
+            check=True, capture_output=True, text=True
+        )
     except subprocess.CalledProcessError as e:
         print("❌ Error running workflow:", e.stderr)
         return Response({'error': 'Failed to process image'}, status=500)
-
-    # 🔁 Wait until file exists (max 10 seconds)
-    timeout = 10
-    waited = 0
-    while not os.path.exists(output_path) and waited < timeout:
-        time.sleep(0.5)
-        waited += 0.5
-
-    if not os.path.exists(output_path):
-        return Response({'error': 'Anime image not generated in time'}, status=500)
-    
-    # store the output image in output image path
-    animeImage.anime_image.name = f'outputs/{output_filename}'
-    animeImage.save()
-    
-    # get the url and give it to frontend for the user to check
-    animeurl = request.build_absolute_uri(animeImage.anime_image.url)
+    # 4) Upload the generated output to S3 via ImageField
+    with open(output_path, "rb") as f:
+        animeImage.anime_image.save(f"outputs/{output_filename}", File(f), save=True)
+    # 5) Cleanup temp files
+    for p in (input_path, output_path):
+        try:
+            os.remove(p)
+        except FileNotFoundError:
+            pass
+    animeurl = animeImage.anime_image.url  # already absolute S3 URL
     return Response({'anime_image_url': animeurl}, status=200)
 
 @api_view(['POST'])
