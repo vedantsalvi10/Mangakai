@@ -5,6 +5,7 @@ import json
 import urllib.request
 import urllib.parse
 import os
+from django.conf import settings
 from PIL import Image
 import io
 
@@ -64,9 +65,9 @@ def get_images(ws, prompt):
         output_images[node_id] = images_output
 
     return output_images
-
+script_path = os.path.join(settings.BASE_DIR, "face_to_anime (1).json")
 # ---- STEP 4: Load Workflow JSON and Inject Input Path ----
-with open("C:/Users/vedan/OneDrive/Desktop/Mangakai/mangakai_backend/mangakai/face_to_anime (1).json", "r", encoding="utf-8") as f:
+with open(script_path, "r", encoding="utf-8") as f:
     prompt = json.load(f)
 # Find the node that needs the input image path
 # Replace `11` below with the actual node ID key in your JSON
