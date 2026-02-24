@@ -86,11 +86,11 @@ def animeImage(request):
     tmp_out_dir = os.path.join(settings.BASE_DIR, "tmp_outputs")
     os.makedirs(tmp_out_dir, exist_ok=True)
     output_path = os.path.join(tmp_out_dir, output_filename)
-    
+    script_path = os.path.join(settings.BASE_DIR, "run_workflow.py")
     # 3) Run workflow
     try:
         subprocess.run(
-            ['python', 'run_workflow.py', '--input', input_path, '--output', output_path],
+            ['python', script_path, '--input', input_path, '--output', output_path],
             check=True, capture_output=True, text=True
         )
     except subprocess.CalledProcessError as e:
