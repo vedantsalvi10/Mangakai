@@ -8,6 +8,7 @@ import os
 from django.conf import settings
 from PIL import Image
 import io
+import requests
 
 # ---- STEP 1: Parse CLI Arguments ----
 parser = argparse.ArgumentParser()
@@ -19,7 +20,35 @@ input_image_path = args.input
 output_image_path = args.output
 
 # ---- STEP 2: Setup Server and Client ID ----
-server_address = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+
+server_address = os.getenv("COMFYUI_URL")
+
+# Throw error if not set
+if not server_address:
+    raise RuntimeError(
+        "COMFYUI_URL environment variable is not set. "
+        "Set it in your .env file to your ngrok or ComfyUI server URL."
+    )
+
+# Optional: validate format
+if not server_address.startswith(("http://", "https://")):
+    raise ValueError(
+        f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://"
+    )
+
+# Optional: check connectivity
+try:
+    response = requests.get(f"{server_address}/system_stats", timeout=5)
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"ComfyUI server reachable but returned status {response.status_code}"
+        )
+except requests.exceptions.RequestException as e:
+    raise RuntimeError(
+        f"Cannot connect to ComfyUI server at {server_address}. "
+        f"Make sure ngrok and ComfyUI are running.\nError: {e}"
+    )
+
 client_id = str(uuid.uuid4())
 
 # ---- STEP 3: ComfyUI API Helper Functions ----
