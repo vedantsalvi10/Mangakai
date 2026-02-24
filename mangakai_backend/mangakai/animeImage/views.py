@@ -87,6 +87,8 @@ def animeImage(request):
     os.makedirs(tmp_out_dir, exist_ok=True)
     output_path = os.path.join(tmp_out_dir, output_filename)
     script_path = os.path.join(settings.BASE_DIR, "run_workflow.py")
+    if not os.path.exists(script_path):
+      return Response({"error": f"Workflow script not found: {script_path}"}, status=500)
     # 3) Run workflow
     try:
         subprocess.run(
