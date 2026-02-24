@@ -132,6 +132,7 @@ export const animeConversion = createAsyncThunk(
   async (image, thunkAPI) => {
     const token = Cookies.get('authToken');
     try {
+      console.log("Token used for story:", Cookies.get("authToken"));
       const res = await axios.post('animefy/', image,{
         headers: {
           Authorization: `Token ${token}`,
@@ -151,6 +152,7 @@ export const posesGeneration = createAsyncThunk(
   async (_, thunkAPI) => {
     const token = Cookies.get('authToken');
     try {
+      console.log("Token used for story:", Cookies.get("authToken"));
       await axios.post(
         'poses/',
         null,
@@ -173,6 +175,7 @@ export const generateStory = createAsyncThunk(
   async(story,thunkAPI) =>{
        const token = Cookies.get('authToken');
       try{
+        console.log("Token used for story:", Cookies.get("authToken"));
         const res = await axios.post(
           'story/',
           {story},
