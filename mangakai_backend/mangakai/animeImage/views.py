@@ -6,7 +6,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.decorators import parser_classes
-import subprocess, uuid, os 
+import subprocess, uuid, os, sys 
 from django.conf import settings # this is to get files like media/ output/input/poses
 from animeImage.models import AnimeImage,PoseImage     # this are the storage tables where the panels are stored
 import time # this is to create the wait time
@@ -107,11 +107,11 @@ def animeImage(request):
       return Response({"error": f"Workflow script not found: {script_path}"}, status=500)
     # 3) Run workflow
     # #region agent log
-    _dbglog("views.py:animeImage:before_subprocess", "About to run subprocess", {"cmd": ['python', script_path, '--input', input_path, '--output', output_path]}, "H1,H2,H3")
+    _dbglog("views.py:animeImage:before_subprocess", "About to run subprocess", {"cmd": [sys.executable, script_path, '--input', input_path, '--output', output_path], "python_exe": sys.executable}, "H1,H2,H3")
     # #endregion
     try:
         result = subprocess.run(
-            ['python', script_path, '--input', input_path, '--output', output_path],
+            [sys.executable, script_path, '--input', input_path, '--output', output_path],
             check=True, capture_output=True, text=True
         )
         # #region agent log
@@ -161,7 +161,7 @@ def posesGeneration(request):
          
         #  give the pose prompt and imput image to the workflow so that it can generate the poses
          subprocess.run([
-            "python", "run_pose_workflow.py",      
+            sys.executable, "run_pose_workflow.py",      
             "--character", anime_image.anime_image.path,
             "--pose", os.path.join(settings.BASE_DIR, pose_path),
             "--prompt", prompt,
