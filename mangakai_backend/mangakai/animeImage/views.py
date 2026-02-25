@@ -12,6 +12,14 @@ from animeImage.models import AnimeImage,PoseImage     # this are the storage ta
 import time # this is to create the wait time
 import tempfile
 from django.core.files import File
+import json as _json, time as _time
+# #region agent log
+def _dbglog(loc, msg, data=None, hyp=""):
+    import os as _os
+    _lp = _os.path.join(settings.BASE_DIR, "debug-3238e9.log")
+    with open(_lp, "a") as _f:
+        _f.write(_json.dumps({"sessionId":"3238e9","location":loc,"message":msg,"data":data or {},"hypothesisId":hyp,"timestamp":int(_time.time()*1000)}) + "\n")
+# #endregion
 poses_map = {
         'casting':{
             "file":"pose_templates/casting.png",
@@ -60,14 +68,16 @@ poses_map = {
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def animeImage(request):
+  try:
     user = request.user
+    # #region agent log
+    _dbglog("views.py:animeImage:entry", "View called", {"user": str(user)}, "H5")
+    # #endregion
     # get the input image 
     image_file = request.FILES.get('image')
     if not image_file:
         return Response({'error': 'No image uploaded'}, status=400)
 
-    # check if the anime image for a particular user already exists or not if it does then delete that image also delete the output image
-    # (This allows us to save memory and not repeat a action)
     animeImage,_ = AnimeImage.objects.get_or_create(user=user)
     
     if animeImage.anime_image:
@@ -76,6 +86,9 @@ def animeImage(request):
       animeImage.original_image.delete(save=False)
     animeImage.original_image = image_file
     animeImage.save()
+    # #region agent log
+    _dbglog("views.py:animeImage:after_save", "Image saved to model", {"original_name": animeImage.original_image.name}, "H5")
+    # #endregion
     output_filename = f'{uuid.uuid4()}.png'
     # 1) Download the uploaded original image locally (S3-safe)
     with tempfile.NamedTemporaryFile(suffix=os.path.splitext(animeImage.original_image.name)[-1], delete=False) as tmp_in:
@@ -87,17 +100,28 @@ def animeImage(request):
     os.makedirs(tmp_out_dir, exist_ok=True)
     output_path = os.path.join(tmp_out_dir, output_filename)
     script_path = os.path.join(settings.BASE_DIR, "run_workflow.py")
+    # #region agent log
+    _dbglog("views.py:animeImage:paths", "Resolved paths", {"input_path": input_path, "output_path": output_path, "script_path": script_path, "script_exists": os.path.exists(script_path), "BASE_DIR": str(settings.BASE_DIR)}, "H4")
+    # #endregion
     if not os.path.exists(script_path):
       return Response({"error": f"Workflow script not found: {script_path}"}, status=500)
     # 3) Run workflow
+    # #region agent log
+    _dbglog("views.py:animeImage:before_subprocess", "About to run subprocess", {"cmd": ['python', script_path, '--input', input_path, '--output', output_path]}, "H1,H2,H3")
+    # #endregion
     try:
-        subprocess.run(
+        result = subprocess.run(
             ['python', script_path, '--input', input_path, '--output', output_path],
             check=True, capture_output=True, text=True
         )
+        # #region agent log
+        _dbglog("views.py:animeImage:subprocess_success", "Subprocess completed", {"stdout": result.stdout[:500] if result.stdout else "", "stderr": result.stderr[:500] if result.stderr else ""}, "H1,H2,H3")
+        # #endregion
     except subprocess.CalledProcessError as e:
-        print("❌ Error running workflow:", e.stderr)
-        return Response({'error': 'Failed to process image'}, status=500)
+        # #region agent log
+        _dbglog("views.py:animeImage:subprocess_FAILED", "Subprocess error", {"returncode": e.returncode, "stderr": e.stderr[:2000] if e.stderr else "", "stdout": e.stdout[:500] if e.stdout else ""}, "H1,H2,H3,H4")
+        # #endregion
+        return Response({'error': 'Failed to process image', 'detail': e.stderr[:500] if e.stderr else 'no stderr'}, status=500)
     # 4) Upload the generated output to S3 via ImageField
     with open(output_path, "rb") as f:
         animeImage.anime_image.save(f"outputs/{output_filename}", File(f), save=True)
@@ -107,8 +131,17 @@ def animeImage(request):
             os.remove(p)
         except FileNotFoundError:
             pass
-    animeurl = animeImage.anime_image.url  # already absolute S3 URL
+    animeurl = animeImage.anime_image.url
+    # #region agent log
+    _dbglog("views.py:animeImage:success", "Returning anime URL", {"url": animeurl}, "H5")
+    # #endregion
     return Response({'anime_image_url': animeurl}, status=200)
+  except Exception as exc:
+    # #region agent log
+    import traceback
+    _dbglog("views.py:animeImage:UNHANDLED", "Unhandled exception", {"error": str(exc), "traceback": traceback.format_exc()}, "H5")
+    # #endregion
+    return Response({'error': str(exc)}, status=500)
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
