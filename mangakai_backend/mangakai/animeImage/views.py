@@ -124,7 +124,7 @@ def animeImage(request):
         return Response({'error': 'Failed to process image', 'detail': e.stderr[:500] if e.stderr else 'no stderr'}, status=500)
     # 4) Upload the generated output to S3 via ImageField
     with open(output_path, "rb") as f:
-        animeImage.anime_image.save(f"outputs/{output_filename}", File(f), save=True)
+        animeImage.anime_image.save(output_filename, File(f), save=True)
     # 5) Cleanup temp files
     for p in (input_path, output_path):
         try:
