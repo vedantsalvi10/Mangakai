@@ -12,6 +12,7 @@ from animeImage.models import AnimeImage,PoseImage     # this are the storage ta
 import time # this is to create the wait time
 import tempfile
 from django.core.files import File
+import boto3
 import json as _json, time as _time
 # #region agent log
 def _dbglog(loc, msg, data=None, hyp=""):
@@ -131,9 +132,19 @@ def animeImage(request):
             os.remove(p)
         except FileNotFoundError:
             pass
-    animeurl = animeImage.anime_image.url
+    s3_client = boto3.client(
+        's3',
+        region_name=settings.AWS_S3_REGION_NAME,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+    )
+    animeurl = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': animeImage.anime_image.name},
+        ExpiresIn=3600,
+    )
     # #region agent log
-    _dbglog("views.py:animeImage:success", "Returning anime URL", {"url": animeurl}, "H5")
+    _dbglog("views.py:animeImage:success", "Returning anime URL", {"url": animeurl[:200], "s3_key": animeImage.anime_image.name}, "H8")
     # #endregion
     return Response({'anime_image_url': animeurl}, status=200)
   except Exception as exc:
