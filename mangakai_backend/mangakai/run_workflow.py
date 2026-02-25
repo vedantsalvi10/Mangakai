@@ -68,7 +68,11 @@ client_id = str(uuid.uuid4())
 def queue_prompt(prompt):
     p = {"prompt": prompt, "client_id": client_id}
     data = json.dumps(p).encode('utf-8')
-    req = urllib.request.Request(f"{server_address}/prompt", data=data)
+    req = urllib.request.Request(
+        f"{server_address}/prompt",
+        data=data,
+        headers={"Content-Type": "application/json"}
+    )
     return json.loads(urllib.request.urlopen(req).read())
 
 def get_image(filename, subfolder, folder_type):
