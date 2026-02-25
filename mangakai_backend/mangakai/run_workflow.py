@@ -21,51 +21,35 @@ output_image_path = args.output
 
 # ---- STEP 2: Setup Server and Client ID ----
 
-server_address = os.getenv("COMFYUI_URL")
-
-# Throw error if not set
-if not server_address:
-    raise RuntimeError(
-        "COMFYUI_URL environment variable is not set. "
-        "Set it in your .env file to your ngrok or ComfyUI server URL."
-    )
-
-# Optional: validate format
-if not server_address.startswith(("http://", "https://")):
-    raise ValueError(
-        f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://"
-    )
-
-# Optional: check connectivity
-try:
-    response = requests.get(f"{server_address}/system_stats", timeout=5)
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"ComfyUI server reachable but returned status {response.status_code}"
-        )
-except requests.exceptions.RequestException as e:
-    raise RuntimeError(
-        f"Cannot connect to ComfyUI server at {server_address}. "
-        f"Make sure ngrok and ComfyUI are running.\nError: {e}"
-    )
-
 client_id = str(uuid.uuid4())
+from urllib.parse import urlparse
 
-# ---- STEP 3: ComfyUI API Helper Functions ----
+server_address = os.getenv("COMFYUI_URL")
+if not server_address:
+    raise RuntimeError("COMFYUI_URL environment variable is not set.")
+
+# Parse full URL like: https://xxxx.ngrok-free.app
+u = urlparse(server_address)
+if u.scheme not in ("http", "https") or not u.netloc:
+    raise ValueError(f"Invalid COMFYUI_URL: {server_address}")
+
+BASE_HTTP = f"{u.scheme}://{u.netloc}"          # https://xxxx.ngrok-free.app
+BASE_WS   = f"{'wss' if u.scheme=='https' else 'ws'}://{u.netloc}"  # wss://xxxx...
+
 def queue_prompt(prompt):
     p = {"prompt": prompt, "client_id": client_id}
-    data = json.dumps(p).encode('utf-8')
-    req = urllib.request.Request(f"http://{server_address}/prompt", data=data)
+    data = json.dumps(p).encode("utf-8")
+    req = urllib.request.Request(f"{BASE_HTTP}/prompt", data=data)
     return json.loads(urllib.request.urlopen(req).read())
 
 def get_image(filename, subfolder, folder_type):
     data = {"filename": filename, "subfolder": subfolder, "type": folder_type}
     url_values = urllib.parse.urlencode(data)
-    with urllib.request.urlopen(f"http://{server_address}/view?{url_values}") as response:
+    with urllib.request.urlopen(f"{BASE_HTTP}/view?{url_values}") as response:
         return response.read()
 
 def get_history(prompt_id):
-    with urllib.request.urlopen(f"http://{server_address}/history/{prompt_id}") as response:
+    with urllib.request.urlopen(f"{BASE_HTTP}/history/{prompt_id}") as response:
         return json.loads(response.read())
 
 def get_images(ws, prompt):
@@ -94,7 +78,10 @@ def get_images(ws, prompt):
         output_images[node_id] = images_output
 
     return output_images
-script_path = os.path.join(settings.BASE_DIR, "face_to_anime (1).json")
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+script_path = os.path.join(HERE, "face_to_anime (1).json")
+
 # ---- STEP 4: Load Workflow JSON and Inject Input Path ----
 with open(script_path, "r", encoding="utf-8") as f:
     prompt = json.load(f)
@@ -105,7 +92,7 @@ prompt["11"]["inputs"]["image"] = input_image_path
 
 # ---- STEP 5: Connect to WebSocket, Run Workflow, Get Image ----
 ws = websocket.WebSocket()
-ws.connect(f"ws://{server_address}/ws?clientId={client_id}")
+ws.connect(f"{BASE_WS}/ws?clientId={client_id}")
 images = get_images(ws, prompt)
 ws.close()
 
