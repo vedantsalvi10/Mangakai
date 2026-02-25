@@ -73,7 +73,17 @@ def queue_prompt(prompt):
         data=data,
         headers={"Content-Type": "application/json"}
     )
-    return json.loads(urllib.request.urlopen(req).read())
+    # #region agent log
+    try:
+        resp = urllib.request.urlopen(req)
+        body = resp.read()
+        _dbglog("run_workflow.py:queue_prompt:ok", "Prompt queued", {"status": resp.status, "body": body.decode()[:500]}, "H6")
+        return json.loads(body)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode(errors="replace")[:2000]
+        _dbglog("run_workflow.py:queue_prompt:FAIL", "ComfyUI rejected prompt", {"status": e.code, "reason": e.reason, "response_body": err_body, "url": req.full_url, "node_11_image": prompt.get("11", {}).get("inputs", {}).get("image", "N/A")}, "H6")
+        raise
+    # #endregion
 
 def get_image(filename, subfolder, folder_type):
     data = {"filename": filename, "subfolder": subfolder, "type": folder_type}
