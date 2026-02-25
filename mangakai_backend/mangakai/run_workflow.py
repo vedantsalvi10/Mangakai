@@ -85,6 +85,30 @@ def queue_prompt(prompt):
         raise
     # #endregion
 
+def upload_image(filepath):
+    """Upload a local image to ComfyUI's input directory via its /upload/image API."""
+    filename = os.path.basename(filepath)
+    with open(filepath, "rb") as f:
+        file_data = f.read()
+    boundary = uuid.uuid4().hex
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+        f"Content-Type: image/png\r\n\r\n"
+    ).encode() + file_data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(
+        f"{server_address}/upload/image",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    resp = urllib.request.urlopen(req)
+    result = json.loads(resp.read())
+    # #region agent log
+    _dbglog("run_workflow.py:upload_image", "Uploaded image to ComfyUI", {"result": result, "original_path": filepath}, "H6")
+    # #endregion
+    return result["name"]
+
 def get_image(filename, subfolder, folder_type):
     data = {"filename": filename, "subfolder": subfolder, "type": folder_type}
     url_values = urllib.parse.urlencode(data)
@@ -129,10 +153,8 @@ _dbglog("run_workflow.py:workflow_json", "Looking for workflow JSON", {"path": s
 # ---- STEP 4: Load Workflow JSON and Inject Input Path ----
 with open(script_path, "r", encoding="utf-8") as f:
     prompt = json.load(f)
-# Find the node that needs the input image path
-# Replace `11` below with the actual node ID key in your JSON
-# If you're unsure, print the prompt keys and locate it
-prompt["11"]["inputs"]["image"] = input_image_path
+uploaded_name = upload_image(input_image_path)
+prompt["11"]["inputs"]["image"] = uploaded_name
 
 # ---- STEP 5: Connect to WebSocket, Run Workflow, Get Image ----
 # #region agent log
