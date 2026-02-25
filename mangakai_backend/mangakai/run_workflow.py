@@ -122,24 +122,45 @@ def get_history(prompt_id):
 def get_images(ws, prompt):
     prompt_id = queue_prompt(prompt)['prompt_id']
     output_images = {}
+    # #region agent log
+    _dbglog("run_workflow.py:get_images:start", "Waiting for WS messages", {"prompt_id": prompt_id}, "H7")
+    msg_count = 0
+    # #endregion
 
     while True:
         out = ws.recv()
         if isinstance(out, str):
             message = json.loads(out)
+            # #region agent log
+            msg_count += 1
+            if msg_count <= 20:
+                _dbglog("run_workflow.py:get_images:ws_msg", "WS message received", {"type": message.get("type"), "data_keys": list(message.get("data", {}).keys()), "msg_count": msg_count}, "H7")
+            # #endregion
             if message['type'] == 'executing':
                 data = message['data']
                 if data['node'] is None and data['prompt_id'] == prompt_id:
-                    break  # Done executing
+                    # #region agent log
+                    _dbglog("run_workflow.py:get_images:done_executing", "Workflow execution complete", {"msg_count": msg_count}, "H7")
+                    # #endregion
+                    break
         else:
-            continue  # Binary previews
+            continue
 
+    # #region agent log
+    _dbglog("run_workflow.py:get_images:fetching_history", "Fetching history", {"prompt_id": prompt_id}, "H7")
+    # #endregion
     history = get_history(prompt_id)[prompt_id]
+    # #region agent log
+    _dbglog("run_workflow.py:get_images:got_history", "Got history", {"output_node_ids": list(history.get('outputs', {}).keys())}, "H7")
+    # #endregion
     for node_id in history['outputs']:
         node_output = history['outputs'][node_id]
         images_output = []
         if 'images' in node_output:
             for image in node_output['images']:
+                # #region agent log
+                _dbglog("run_workflow.py:get_images:downloading", "Downloading output image", {"node_id": node_id, "filename": image['filename']}, "H7")
+                # #endregion
                 image_data = get_image(image['filename'], image['subfolder'], image['type'])
                 images_output.append(image_data)
         output_images[node_id] = images_output
