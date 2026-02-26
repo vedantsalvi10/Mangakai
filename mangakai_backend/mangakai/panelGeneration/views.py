@@ -6,6 +6,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import authentication_classes, permission_classes
 from django.conf import settings
+from django.http import HttpResponse
 from animeImage.models import AnimeImage, PoseImage
 from panelGeneration.models import MangaPage
 from django.core.files import File
@@ -327,3 +328,35 @@ def generate_story_prompt(request):
     import traceback
     _dbglog("views.py:generate_story_prompt:UNHANDLED", "Unhandled exception", {"error": str(exc), "traceback": traceback.format_exc()})
     return Response({"error": str(exc)}, status=500)
+
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def panel_download(request):
+    """Stream the user's latest panel image as a download (avoids S3 CORS in the browser)."""
+    try:
+        page = (
+            MangaPage.objects.filter(user=request.user)
+            .exclude(generated_panel="")
+            .order_by("-id")
+            .first()
+        )
+        if not page or not page.generated_panel.name:
+            return Response({"error": "No panel found"}, status=404)
+
+        bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
+        if bucket:
+            s3 = _make_s3_client()
+            obj = s3.get_object(Bucket=bucket, Key=page.generated_panel.name)
+            body = obj["Body"].read()
+        else:
+            with page.generated_panel.open("rb") as f:
+                body = f.read()
+
+        response = HttpResponse(body, content_type="image/png")
+        response["Content-Disposition"] = 'attachment; filename="manga_panel.png"'
+        return response
+    except Exception as e:
+        _dbglog("views.py:panel_download:error", "Download failed", {"error": str(e)})
+        return Response({"error": str(e)}, status=500)

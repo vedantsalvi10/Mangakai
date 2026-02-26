@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { generateStory} from "../redux/authSlice";
 import { useDispatch, useSelector  } from "react-redux";
 import Cookies from 'js-cookie';
+import axios from '../utils/auth';
 const PanelGeneration = ()=>{
 const [story,setStory] = useState()
 const dispatch = useDispatch()
@@ -15,21 +16,24 @@ const animefy = useSelector((state)=> state.authentication)
 const handlePanelGeneration = () =>{
   dispatch(generateStory( story ));
 }
-// download image
+// download via backend (no S3 CORS needed); triggers real file download
 const downloadImage = async () => {
+  if (!animefy.panel) return;
+  const token = Cookies.get('authToken');
+  if (!token) return;
   try {
-    const response = await fetch(animefy.panel, { mode: 'cors' });
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-
+    const res = await axios.get('panel-download/', {
+      responseType: 'blob',
+      headers: { Authorization: `Token ${token}` },
+    });
+    if (res.status !== 200) throw new Error('No panel to download');
+    const url = URL.createObjectURL(res.data);
     const link = document.createElement('a');
     link.href = url;
     link.download = 'manga_panel.png';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
-    // Clean up the blob URL
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error("Download failed:", error);

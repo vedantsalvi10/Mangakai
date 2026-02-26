@@ -2,7 +2,7 @@
 from django.contrib import admin
 from authentication.views import register
 from animeImage.views import animeImage,posesGeneration
-from panelGeneration.views import generate_story_prompt
+from panelGeneration.views import generate_story_prompt, panel_download
 from rest_framework.authtoken.views import obtain_auth_token
 from django.urls import path
 from django.conf import settings
@@ -15,7 +15,8 @@ urlpatterns = [
     path('login/',obtain_auth_token),
     path('animefy/',animeImage),
     path('poses/',posesGeneration),
-    path('story/',generate_story_prompt),
+    path('story/', generate_story_prompt),
+    path('panel-download/', panel_download),
 ]
 
 if settings.DEBUG:
