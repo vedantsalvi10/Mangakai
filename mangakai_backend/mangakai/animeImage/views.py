@@ -125,73 +125,68 @@ def animeImage(request):
         _dbglog("views.py:animeImage:subprocess_FAILED", "Subprocess error", {"returncode": e.returncode, "stderr": e.stderr[:2000] if e.stderr else "", "stdout": e.stdout[:500] if e.stdout else ""}, "H1,H2,H3,H4")
         # #endregion
         return Response({'error': 'Failed to process image', 'detail': e.stderr[:500] if e.stderr else 'no stderr'}, status=500)
-    # 4) Upload the generated output (S3 or local via ImageField)
-    try:
-        if not getattr(settings, "DEFAULT_FILE_STORAGE", "").endswith("S3Boto3Storage"):
-            media_root = getattr(settings, "MEDIA_ROOT", None)
-            if media_root:
-                out_dir = os.path.join(str(media_root), "outputs")
-                os.makedirs(out_dir, exist_ok=True)
-        with open(output_path, "rb") as f:
-            animeImage.anime_image.save(output_filename, File(f), save=True)
-    except Exception as upload_err:
-        _dbglog("views.py:animeImage:upload_failed", "S3 upload failed", {"error": str(upload_err), "filename": output_filename}, "H5")
-        return Response({"error": "Failed to upload image to storage", "detail": str(upload_err)}, status=500)
+    # 4) Upload the generated output
+    using_s3 = bool(getattr(settings, "AWS_STORAGE_BUCKET_NAME", None))
+    s3_key = f"outputs/{output_filename}"
+
+    if using_s3:
+        bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME")
+        region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
+        try:
+            file_size = os.path.getsize(output_path)
+            _dbglog("views.py:animeImage:pre_upload", "About to upload to S3 via boto3", {"file_size": file_size, "key": s3_key, "bucket": bucket}, "H5")
+            s3client = boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+            with open(output_path, "rb") as f:
+                s3client.put_object(Bucket=bucket, Key=s3_key, Body=f, ContentType="image/png")
+            _dbglog("views.py:animeImage:upload_ok", "Uploaded to S3 via boto3 put_object", {"key": s3_key}, "H5")
+            # Update DB record to point at the new S3 key
+            AnimeImage.objects.filter(pk=animeImage.pk).update(anime_image=s3_key)
+        except Exception as upload_err:
+            _dbglog("views.py:animeImage:upload_failed", "S3 put_object failed", {"error": str(upload_err), "key": s3_key}, "H5")
+            return Response({"error": "Failed to upload image to S3", "detail": str(upload_err)}, status=500)
+    else:
+        # Local storage
+        media_root = getattr(settings, "MEDIA_ROOT", None)
+        if media_root:
+            out_dir = os.path.join(str(media_root), "outputs")
+            os.makedirs(out_dir, exist_ok=True)
+        try:
+            with open(output_path, "rb") as f:
+                animeImage.anime_image.save(output_filename, File(f), save=True)
+            s3_key = animeImage.anime_image.name
+        except Exception as upload_err:
+            _dbglog("views.py:animeImage:upload_failed", "Local save failed", {"error": str(upload_err), "filename": output_filename}, "H5")
+            return Response({"error": "Failed to save image locally", "detail": str(upload_err)}, status=500)
+
     # 5) Cleanup temp files
     for p in (input_path, output_path):
         try:
             os.remove(p)
         except FileNotFoundError:
             pass
-    s3_key = animeImage.anime_image.name
-    using_s3 = bool(getattr(settings, "AWS_STORAGE_BUCKET_NAME", None))
 
     if using_s3:
-        bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
-        region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
-        animeurl = None
-        if bucket and s3_key:
-            try:
-                # Use instance role credentials (default chain) — do NOT pass explicit keys
-                client = boto3.client(
-                    "s3",
-                    region_name=region,
-                    config=Config(signature_version="s3v4"),
-                )
-                try:
-                    client.head_object(Bucket=bucket, Key=s3_key)
-                except ClientError as e:
-                    code = e.response.get("Error", {}).get("Code", "")
-                    if code in ("404", "NoSuchKey"):
-                        _dbglog("views.py:animeImage:s3_key_missing", "Object not in S3 after save", {"bucket": bucket, "key": s3_key}, "H5")
-                        return Response({"error": "Image upload did not complete; object not found in storage.", "key": s3_key}, status=500)
-                    raise
-                animeurl = client.generate_presigned_url(
-                    "get_object",
-                    Params={"Bucket": bucket, "Key": s3_key},
-                    ExpiresIn=3600,
-                )
-            except Exception as e:
-                _dbglog("views.py:animeImage:presign_failed", "Presign failed", {"error": str(e), "key": s3_key}, "H5")
-                raise
-        if not animeurl or "X-Amz-Algorithm" not in (animeurl or ""):
-            _dbglog("views.py:animeImage:no_sigv4", "Presigned URL missing SigV4 params", {"key": s3_key}, "H5")
-            return Response(
-                {"error": "Failed to generate secure image URL"},
-                status=500,
+        try:
+            animeurl = s3client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": s3_key},
+                ExpiresIn=3600,
             )
-        # #region agent log
+        except Exception as e:
+            _dbglog("views.py:animeImage:presign_failed", "Presign failed", {"error": str(e), "key": s3_key}, "H5")
+            return Response({"error": "Failed to generate presigned URL", "detail": str(e)}, status=500)
+        if not animeurl or "X-Amz-Algorithm" not in animeurl:
+            _dbglog("views.py:animeImage:no_sigv4", "Presigned URL missing SigV4 params", {"key": s3_key}, "H5")
+            return Response({"error": "Failed to generate secure image URL"}, status=500)
         _dbglog("views.py:animeImage:success", "Returning anime URL (S3)", {
             "url_len": len(animeurl),
             "key": s3_key,
+            "url_sample": animeurl[:120],
         }, "H5")
-        # #endregion
         return Response({'anime_image_url': animeurl}, status=200)
     else:
-        # Local storage: file is under MEDIA_ROOT (e.g. media/outputs/xxx.png). Return absolute URL.
         relative_url = animeImage.anime_image.url
         animeurl = request.build_absolute_uri(relative_url)
-        # #region agent log
         _dbglog("views.py:animeImage:success", "Returning anime URL (local)", {"url": animeurl, "key": s3_key}, "H5")
         # #endregion
         return Response({'anime_image_url': animeurl}, status=200)
