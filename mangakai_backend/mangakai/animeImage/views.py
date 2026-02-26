@@ -14,6 +14,7 @@ import tempfile
 from django.core.files import File
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 import json as _json, time as _time
 # #region agent log
 def _dbglog(loc, msg, data=None, hyp=""):
@@ -125,8 +126,12 @@ def animeImage(request):
         # #endregion
         return Response({'error': 'Failed to process image', 'detail': e.stderr[:500] if e.stderr else 'no stderr'}, status=500)
     # 4) Upload the generated output to S3 via ImageField
-    with open(output_path, "rb") as f:
-        animeImage.anime_image.save(output_filename, File(f), save=True)
+    try:
+        with open(output_path, "rb") as f:
+            animeImage.anime_image.save(output_filename, File(f), save=True)
+    except Exception as upload_err:
+        _dbglog("views.py:animeImage:upload_failed", "S3 upload failed", {"error": str(upload_err), "filename": output_filename}, "H5")
+        return Response({"error": "Failed to upload image to storage", "detail": str(upload_err)}, status=500)
     # 5) Cleanup temp files
     for p in (input_path, output_path):
         try:
@@ -145,6 +150,14 @@ def animeImage(request):
                 client_kw["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
                 client_kw["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
             client = boto3.client("s3", **client_kw)
+            try:
+                client.head_object(Bucket=bucket, Key=s3_key)
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("404", "NoSuchKey"):
+                    _dbglog("views.py:animeImage:s3_key_missing", "Object not in S3 after save", {"bucket": bucket, "key": s3_key}, "H5")
+                    return Response({"error": "Image upload did not complete; object not found in storage.", "key": s3_key}, status=500)
+                raise
             animeurl = client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": s3_key},

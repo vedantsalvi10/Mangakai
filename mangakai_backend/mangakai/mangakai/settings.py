@@ -63,7 +63,7 @@ AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "ap-south-1")
 
 # If AWS keys exist → use S3
 if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_STORAGE_BUCKET_NAME:
-    AWS_DEFAULT_ACL = "public-read"
+    AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = False
     AWS_S3_CUSTOM_DOMAIN = None
     AWS_S3_FILE_OVERWRITE = False
