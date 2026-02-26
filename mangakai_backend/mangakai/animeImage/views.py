@@ -13,6 +13,7 @@ import time # this is to create the wait time
 import tempfile
 from django.core.files import File
 import boto3
+from botocore.config import Config
 import json as _json, time as _time
 # #region agent log
 def _dbglog(loc, msg, data=None, hyp=""):
@@ -137,11 +138,11 @@ def animeImage(request):
     region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
     if bucket and s3_key:
         try:
-            s3_config = {}
+            s3_config = {"region_name": region}
             if getattr(settings, "AWS_ACCESS_KEY_ID", None) and getattr(settings, "AWS_SECRET_ACCESS_KEY", None):
                 s3_config["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
                 s3_config["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-            s3_config["region_name"] = region
+            s3_config["config"] = Config(signature_version="s3v4")
             client = boto3.client("s3", **s3_config)
             animeurl = client.generate_presigned_url(
                 "get_object",
