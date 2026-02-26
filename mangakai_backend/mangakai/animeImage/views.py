@@ -197,46 +197,113 @@ def animeImage(request):
     # #endregion
     return Response({'error': str(exc)}, status=500)
 
+def _download_field_to_tmp(field):
+    """Download an ImageField (local or S3) to a named temp file, return its path."""
+    ext = os.path.splitext(field.name or '')[1] or '.png'
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        for chunk in field.chunks():
+            tmp.write(chunk)
+        return tmp.name
+
+def _make_s3_client(settings_obj):
+    region = getattr(settings_obj, "AWS_S3_REGION_NAME", "ap-south-1")
+    return boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def posesGeneration(request):
+  try:
     user = request.user
     anime_image = AnimeImage.objects.get(user=user)
-    
-    # Go through the pose map one by one and give those poses to the comfyUI to generate the images
-    for pose_name, config in poses_map.items():
-         pose_path = config["file"]
-         prompt = config["prompt"]
-         
-         output_filename = f"{pose_name}.png"
-         output_path = os.path.join(settings.MEDIA_ROOT, "poses", output_filename)
-         
-        #  give the pose prompt and imput image to the workflow so that it can generate the poses
-         subprocess.run([
-            sys.executable, "run_pose_workflow.py",      
-            "--character", anime_image.anime_image.path,
-            "--pose", os.path.join(settings.BASE_DIR, pose_path),
-            "--prompt", prompt,
-            "--output", output_path,
-        ], check=True)
-         
-        #  wait for 10 seconds if no image then give error
-         timeout = 10
-         waited = 0
-         while not os.path.exists(output_path) and waited <timeout:
-             time.sleep(0.5)
-             waited +=0.5
-        
-        # Store the generated pose in the path 
-         PoseImage.objects.update_or_create(
-            anime_image=anime_image,
-            pose_name=pose_name,
-             defaults={
-                "image": f"poses/{output_filename}",  
-            }  
-        )
+
+    using_s3 = bool(getattr(settings, "AWS_STORAGE_BUCKET_NAME", None))
+    bucket    = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
+    s3client  = _make_s3_client(settings) if using_s3 else None
+
+    tmp_out_dir = os.path.join(settings.BASE_DIR, "tmp_outputs")
+    os.makedirs(tmp_out_dir, exist_ok=True)
+
+    script_path = os.path.join(settings.BASE_DIR, "run_pose_workflow.py")
+
+    # Download the anime image once (S3-safe — avoids calling .path on S3 field)
+    character_tmp = _download_field_to_tmp(anime_image.anime_image)
+    _dbglog("views.py:posesGeneration:start", "Starting pose generation", {"num_poses": len(poses_map), "character_tmp": character_tmp}, "H5")
+
+    try:
+        for pose_name, config in poses_map.items():
+            pose_template_path = os.path.join(settings.BASE_DIR, config["file"])
+            prompt_text        = config["prompt"]
+            output_filename    = f"{pose_name}.png"
+            output_path        = os.path.join(tmp_out_dir, output_filename)
+
+            _dbglog("views.py:posesGeneration:pose_start", f"Running pose: {pose_name}", {"pose_template": pose_template_path}, "H5")
+
+            try:
+                result = subprocess.run(
+                    [
+                        sys.executable, script_path,
+                        "--character", character_tmp,
+                        "--pose",      pose_template_path,
+                        "--prompt",    prompt_text,
+                        "--output",    output_path,
+                    ],
+                    check=True, capture_output=True, text=True, timeout=300,
+                )
+                _dbglog("views.py:posesGeneration:pose_done", f"Pose subprocess OK: {pose_name}", {"stderr": result.stderr[:300] if result.stderr else ""}, "H5")
+            except subprocess.CalledProcessError as e:
+                _dbglog("views.py:posesGeneration:pose_FAILED", f"Pose subprocess failed: {pose_name}", {"returncode": e.returncode, "stderr": e.stderr[:1000] if e.stderr else ""}, "H5")
+                return Response({"error": f"Pose generation failed for {pose_name}", "detail": e.stderr[:500] if e.stderr else "no stderr"}, status=500)
+
+            # Upload output to S3 or local storage
+            if using_s3:
+                s3_key = f"poses/{output_filename}"
+                try:
+                    file_size = os.path.getsize(output_path)
+                    _dbglog("views.py:posesGeneration:uploading", f"Uploading pose to S3: {pose_name}", {"key": s3_key, "size": file_size}, "H5")
+                    with open(output_path, "rb") as f:
+                        s3client.put_object(Bucket=bucket, Key=s3_key, Body=f, ContentType="image/png")
+                    PoseImage.objects.update_or_create(
+                        anime_image=anime_image,
+                        pose_name=pose_name,
+                        defaults={"image": s3_key},
+                    )
+                    _dbglog("views.py:posesGeneration:uploaded", f"Pose uploaded: {pose_name}", {"key": s3_key}, "H5")
+                except Exception as upload_err:
+                    _dbglog("views.py:posesGeneration:upload_FAILED", f"Pose S3 upload failed: {pose_name}", {"error": str(upload_err)}, "H5")
+                    return Response({"error": f"Failed to upload pose {pose_name} to S3", "detail": str(upload_err)}, status=500)
+            else:
+                media_root = getattr(settings, "MEDIA_ROOT", settings.BASE_DIR)
+                poses_dir  = os.path.join(str(media_root), "poses")
+                os.makedirs(poses_dir, exist_ok=True)
+                local_dest = os.path.join(poses_dir, output_filename)
+                with open(output_path, "rb") as src, open(local_dest, "wb") as dst:
+                    dst.write(src.read())
+                PoseImage.objects.update_or_create(
+                    anime_image=anime_image,
+                    pose_name=pose_name,
+                    defaults={"image": f"poses/{output_filename}"},
+                )
+
+            # Remove temp output file
+            try:
+                os.remove(output_path)
+            except FileNotFoundError:
+                pass
+    finally:
+        try:
+            os.remove(character_tmp)
+        except FileNotFoundError:
+            pass
+
+    _dbglog("views.py:posesGeneration:success", "All poses generated", {"num_poses": len(poses_map)}, "H5")
+    return Response({"status": "ok", "poses_generated": len(poses_map)}, status=200)
+
+  except Exception as exc:
+    import traceback
+    _dbglog("views.py:posesGeneration:UNHANDLED", "Unhandled exception", {"error": str(exc), "traceback": traceback.format_exc()}, "H5")
+    return Response({"error": str(exc)}, status=500)
 
 
 
