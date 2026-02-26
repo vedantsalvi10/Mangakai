@@ -136,26 +136,36 @@ def animeImage(request):
     s3_key = animeImage.anime_image.name
     bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
     region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
+    animeurl = None
     if bucket and s3_key:
         try:
-            s3_config = {"region_name": region}
+            sigv4_config = Config(signature_version="s3v4")
+            client_kw = {"config": sigv4_config, "region_name": region}
             if getattr(settings, "AWS_ACCESS_KEY_ID", None) and getattr(settings, "AWS_SECRET_ACCESS_KEY", None):
-                s3_config["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-                s3_config["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-            s3_config["config"] = Config(signature_version="s3v4")
-            client = boto3.client("s3", **s3_config)
+                client_kw["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+                client_kw["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+            client = boto3.client("s3", **client_kw)
             animeurl = client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": s3_key},
                 ExpiresIn=3600,
             )
         except Exception as e:
-            _dbglog("views.py:animeImage:presign_failed", "Presign failed, using .url", {"error": str(e), "key": s3_key}, "H5")
-            animeurl = animeImage.anime_image.url
-    else:
-        animeurl = animeImage.anime_image.url
+            _dbglog("views.py:animeImage:presign_failed", "Presign failed", {"error": str(e), "key": s3_key}, "H5")
+            raise
+    if not animeurl or "X-Amz-Algorithm" not in (animeurl or ""):
+        _dbglog("views.py:animeImage:no_sigv4", "Presigned URL missing SigV4 params", {"key": s3_key}, "H5")
+        return Response(
+            {"error": "Failed to generate secure image URL"},
+            status=500,
+        )
     # #region agent log
-    _dbglog("views.py:animeImage:success", "Returning anime URL", {"url": animeurl[:220] if animeurl else "", "key": s3_key}, "H5")
+    _dbglog("views.py:animeImage:success", "Returning anime URL", {
+        "url_len": len(animeurl),
+        "has_sigv4": True,
+        "url_sample": animeurl[:280],
+        "key": s3_key,
+    }, "H5")
     # #endregion
     return Response({'anime_image_url': animeurl}, status=200)
   except Exception as exc:
