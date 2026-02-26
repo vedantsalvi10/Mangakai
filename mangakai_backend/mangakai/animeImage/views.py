@@ -125,8 +125,13 @@ def animeImage(request):
         _dbglog("views.py:animeImage:subprocess_FAILED", "Subprocess error", {"returncode": e.returncode, "stderr": e.stderr[:2000] if e.stderr else "", "stdout": e.stdout[:500] if e.stdout else ""}, "H1,H2,H3,H4")
         # #endregion
         return Response({'error': 'Failed to process image', 'detail': e.stderr[:500] if e.stderr else 'no stderr'}, status=500)
-    # 4) Upload the generated output to S3 via ImageField
+    # 4) Upload the generated output (S3 or local via ImageField)
     try:
+        if not getattr(settings, "DEFAULT_FILE_STORAGE", "").endswith("S3Boto3Storage"):
+            media_root = getattr(settings, "MEDIA_ROOT", None)
+            if media_root:
+                out_dir = os.path.join(str(media_root), "outputs")
+                os.makedirs(out_dir, exist_ok=True)
         with open(output_path, "rb") as f:
             animeImage.anime_image.save(output_filename, File(f), save=True)
     except Exception as upload_err:
@@ -139,48 +144,58 @@ def animeImage(request):
         except FileNotFoundError:
             pass
     s3_key = animeImage.anime_image.name
-    bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
-    region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
-    animeurl = None
-    if bucket and s3_key:
-        try:
-            sigv4_config = Config(signature_version="s3v4")
-            client_kw = {"config": sigv4_config, "region_name": region}
-            if getattr(settings, "AWS_ACCESS_KEY_ID", None) and getattr(settings, "AWS_SECRET_ACCESS_KEY", None):
-                client_kw["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-                client_kw["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-            client = boto3.client("s3", **client_kw)
+    storage = animeImage.anime_image.storage
+    using_s3 = storage.__class__.__name__ == "S3Boto3Storage"
+
+    if using_s3:
+        bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
+        region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
+        animeurl = None
+        if bucket and s3_key:
             try:
-                client.head_object(Bucket=bucket, Key=s3_key)
-            except ClientError as e:
-                code = e.response.get("Error", {}).get("Code", "")
-                if code in ("404", "NoSuchKey"):
-                    _dbglog("views.py:animeImage:s3_key_missing", "Object not in S3 after save", {"bucket": bucket, "key": s3_key}, "H5")
-                    return Response({"error": "Image upload did not complete; object not found in storage.", "key": s3_key}, status=500)
+                sigv4_config = Config(signature_version="s3v4")
+                client_kw = {"config": sigv4_config, "region_name": region}
+                if getattr(settings, "AWS_ACCESS_KEY_ID", None) and getattr(settings, "AWS_SECRET_ACCESS_KEY", None):
+                    client_kw["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+                    client_kw["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+                client = boto3.client("s3", **client_kw)
+                try:
+                    client.head_object(Bucket=bucket, Key=s3_key)
+                except ClientError as e:
+                    code = e.response.get("Error", {}).get("Code", "")
+                    if code in ("404", "NoSuchKey"):
+                        _dbglog("views.py:animeImage:s3_key_missing", "Object not in S3 after save", {"bucket": bucket, "key": s3_key}, "H5")
+                        return Response({"error": "Image upload did not complete; object not found in storage.", "key": s3_key}, status=500)
+                    raise
+                animeurl = client.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": bucket, "Key": s3_key},
+                    ExpiresIn=3600,
+                )
+            except Exception as e:
+                _dbglog("views.py:animeImage:presign_failed", "Presign failed", {"error": str(e), "key": s3_key}, "H5")
                 raise
-            animeurl = client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": bucket, "Key": s3_key},
-                ExpiresIn=3600,
+        if not animeurl or "X-Amz-Algorithm" not in (animeurl or ""):
+            _dbglog("views.py:animeImage:no_sigv4", "Presigned URL missing SigV4 params", {"key": s3_key}, "H5")
+            return Response(
+                {"error": "Failed to generate secure image URL"},
+                status=500,
             )
-        except Exception as e:
-            _dbglog("views.py:animeImage:presign_failed", "Presign failed", {"error": str(e), "key": s3_key}, "H5")
-            raise
-    if not animeurl or "X-Amz-Algorithm" not in (animeurl or ""):
-        _dbglog("views.py:animeImage:no_sigv4", "Presigned URL missing SigV4 params", {"key": s3_key}, "H5")
-        return Response(
-            {"error": "Failed to generate secure image URL"},
-            status=500,
-        )
-    # #region agent log
-    _dbglog("views.py:animeImage:success", "Returning anime URL", {
-        "url_len": len(animeurl),
-        "has_sigv4": True,
-        "url_sample": animeurl[:280],
-        "key": s3_key,
-    }, "H5")
-    # #endregion
-    return Response({'anime_image_url': animeurl}, status=200)
+        # #region agent log
+        _dbglog("views.py:animeImage:success", "Returning anime URL (S3)", {
+            "url_len": len(animeurl),
+            "key": s3_key,
+        }, "H5")
+        # #endregion
+        return Response({'anime_image_url': animeurl}, status=200)
+    else:
+        # Local storage: file is under MEDIA_ROOT (e.g. media/outputs/xxx.png). Return absolute URL.
+        relative_url = animeImage.anime_image.url
+        animeurl = request.build_absolute_uri(relative_url)
+        # #region agent log
+        _dbglog("views.py:animeImage:success", "Returning anime URL (local)", {"url": animeurl, "key": s3_key}, "H5")
+        # #endregion
+        return Response({'anime_image_url': animeurl}, status=200)
   except Exception as exc:
     # #region agent log
     import traceback
