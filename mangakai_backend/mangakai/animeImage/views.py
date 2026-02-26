@@ -144,8 +144,7 @@ def animeImage(request):
         except FileNotFoundError:
             pass
     s3_key = animeImage.anime_image.name
-    storage = animeImage.anime_image.storage
-    using_s3 = storage.__class__.__name__ == "S3Boto3Storage"
+    using_s3 = bool(getattr(settings, "AWS_STORAGE_BUCKET_NAME", None))
 
     if using_s3:
         bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
