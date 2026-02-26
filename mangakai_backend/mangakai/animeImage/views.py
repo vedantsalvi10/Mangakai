@@ -198,11 +198,20 @@ def animeImage(request):
     return Response({'error': str(exc)}, status=500)
 
 def _download_field_to_tmp(field):
-    """Download an ImageField (local or S3) to a named temp file, return its path."""
-    ext = os.path.splitext(field.name or '')[1] or '.png'
+    """Download an ImageField to a temp file. Uses boto3 when S3 is configured so we
+    don't rely on Django's default storage (which may be filesystem and fail for S3 keys)."""
+    if not field.name:
+        raise ValueError("ImageField has no name (file not saved).")
+    ext = os.path.splitext(field.name)[1] or '.png'
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        for chunk in field.chunks():
-            tmp.write(chunk)
+        bucket = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
+        if bucket:
+            region = getattr(settings, "AWS_S3_REGION_NAME", "ap-south-1")
+            s3 = boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+            s3.download_fileobj(bucket, field.name, tmp)
+        else:
+            for chunk in field.chunks():
+                tmp.write(chunk)
         return tmp.name
 
 def _make_s3_client(settings_obj):
