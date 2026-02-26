@@ -153,12 +153,12 @@ def animeImage(request):
         animeurl = None
         if bucket and s3_key:
             try:
-                sigv4_config = Config(signature_version="s3v4")
-                client_kw = {"config": sigv4_config, "region_name": region}
-                if getattr(settings, "AWS_ACCESS_KEY_ID", None) and getattr(settings, "AWS_SECRET_ACCESS_KEY", None):
-                    client_kw["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-                    client_kw["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-                client = boto3.client("s3", **client_kw)
+                # Use instance role credentials (default chain) — do NOT pass explicit keys
+                client = boto3.client(
+                    "s3",
+                    region_name=region,
+                    config=Config(signature_version="s3v4"),
+                )
                 try:
                     client.head_object(Bucket=bucket, Key=s3_key)
                 except ClientError as e:
