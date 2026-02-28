@@ -49,9 +49,16 @@ if not server_address.startswith(("http://", "https://")):
         f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://"
     )
 
+# RunPod proxy auth (required when COMFYUI_URL is a RunPod proxy)
+_runpod_key = (os.getenv("RUNPOD_API_KEY") or "").strip()
+_comfy_headers = {}
+if _runpod_key:
+    _comfy_headers["Authorization"] = f"Bearer {_runpod_key}"
+    _dbglog("run_workflow.py:runpod", "RunPod API key set, adding Bearer header", {}, "H1")
+
 # Optional: check connectivity
 try:
-    response = requests.get(f"{server_address}/system_stats", timeout=5)
+    response = requests.get(f"{server_address}/system_stats", timeout=5, headers=_comfy_headers)
     if response.status_code != 200:
         raise RuntimeError(
             f"ComfyUI server reachable but returned status {response.status_code}"
@@ -68,10 +75,11 @@ client_id = str(uuid.uuid4())
 def queue_prompt(prompt):
     p = {"prompt": prompt, "client_id": client_id}
     data = json.dumps(p).encode('utf-8')
+    headers = {**_comfy_headers, "Content-Type": "application/json"}
     req = urllib.request.Request(
         f"{server_address}/prompt",
         data=data,
-        headers={"Content-Type": "application/json"}
+        headers=headers,
     )
     # #region agent log
     try:
@@ -96,10 +104,11 @@ def upload_image(filepath):
         f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
         f"Content-Type: image/png\r\n\r\n"
     ).encode() + file_data + f"\r\n--{boundary}--\r\n".encode()
+    headers = {**_comfy_headers, "Content-Type": f"multipart/form-data; boundary={boundary}"}
     req = urllib.request.Request(
         f"{server_address}/upload/image",
         data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        headers=headers,
         method="POST",
     )
     resp = urllib.request.urlopen(req)
@@ -112,11 +121,13 @@ def upload_image(filepath):
 def get_image(filename, subfolder, folder_type):
     data = {"filename": filename, "subfolder": subfolder, "type": folder_type}
     url_values = urllib.parse.urlencode(data)
-    with urllib.request.urlopen(f"{server_address}/view?{url_values}") as response:
+    req = urllib.request.Request(f"{server_address}/view?{url_values}", headers=_comfy_headers)
+    with urllib.request.urlopen(req) as response:
         return response.read()
 
 def get_history(prompt_id):
-    with urllib.request.urlopen(f"{server_address}/history/{prompt_id}") as response:
+    req = urllib.request.Request(f"{server_address}/history/{prompt_id}", headers=_comfy_headers)
+    with urllib.request.urlopen(req) as response:
         return json.loads(response.read())
 
 def get_images(ws, prompt):
