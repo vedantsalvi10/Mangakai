@@ -306,20 +306,18 @@
   },
   "59": {
     "inputs": {
-      "images": [
-        [
-          "54",
-          0
-        ],
-        [
-          "35",
-          0
-        ]
+      "image1": [
+        "54",
+        0
+      ],
+      "image2": [
+        "35",
+        0
       ]
     },
-    "class_type": "easy imageListToImageBatch",
+    "class_type": "ImageBatch",
     "_meta": {
-      "title": "Image List To Image Batch"
+      "title": "Batch Images"
     }
   },
   "60": {
