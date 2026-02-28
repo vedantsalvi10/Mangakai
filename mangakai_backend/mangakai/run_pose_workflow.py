@@ -135,17 +135,30 @@ def get_history(prompt_id):
 
 def get_images(ws, prompt):
     prompt_id = queue_prompt(prompt)['prompt_id']
+    wait_start = _time.time()
     _dbglog("run_pose_workflow.py:get_images:start", "Waiting for WS messages", {"prompt_id": prompt_id})
 
+    # ComfyUI may send executing(node=null) at start and at end. Ignore the first node=null if it
+    # happens within 2s (spurious "execution started"); then treat the next as real completion.
+    seen_node_executing = False
+    min_wait = 2.0
     while True:
         out = ws.recv()
         if isinstance(out, str):
             message = json.loads(out)
             if message['type'] == 'executing':
                 data = message['data']
-                if data['node'] is None and data['prompt_id'] == prompt_id:
-                    _dbglog("run_pose_workflow.py:get_images:done", "Workflow execution complete", {})
-                    break
+                if data.get('prompt_id') != prompt_id:
+                    continue
+                if data.get('node') is not None:
+                    seen_node_executing = True
+                    continue
+                # node is None -> completion signal
+                elapsed = _time.time() - wait_start
+                if not seen_node_executing and elapsed < min_wait:
+                    continue  # ignore very early null (likely "execution started" not "done")
+                _dbglog("run_pose_workflow.py:get_images:done", "Workflow execution complete", {"elapsed": round(elapsed, 2), "seen_node_executing": seen_node_executing})
+                break
 
     history = get_history(prompt_id)[prompt_id]
     output_images = {}
@@ -154,10 +167,9 @@ def get_images(ws, prompt):
         images_output = []
         if 'images' in node_output:
             for image in node_output['images']:
-                if image.get('type') == 'temp':
-                    continue
-                _dbglog("run_pose_workflow.py:get_images:downloading", "Downloading output image", {"node_id": node_id, "filename": image['filename']})
-                image_data = get_image(image['filename'], image['subfolder'], image['type'])
+                # Include both "output" and "temp" — ComfyUI often returns SaveImage as temp
+                _dbglog("run_pose_workflow.py:get_images:downloading", "Downloading output image", {"node_id": node_id, "filename": image['filename'], "type": image.get('type')})
+                image_data = get_image(image['filename'], image.get('subfolder', ''), image.get('type', 'output'))
                 images_output.append(image_data)
         if images_output:
             output_images[node_id] = images_output
@@ -183,6 +195,7 @@ prompt["15"]["inputs"]["image"] = character_name
 ws_address = server_address.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
 _dbglog("run_pose_workflow.py:connecting_ws", "Connecting WebSocket", {"ws_address": ws_address})
 ws = websocket.WebSocket()
+ws.settimeout(330)  # 5.5 min max so we don't hang if server never sends completion
 ws.connect(f"{ws_address}/ws?clientId={client_id}")
 _dbglog("run_pose_workflow.py:ws_connected", "WebSocket connected", {})
 images = get_images(ws, prompt)
