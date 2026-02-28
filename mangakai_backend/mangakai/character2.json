@@ -306,18 +306,33 @@
   },
   "59": {
     "inputs": {
-      "image1": [
-        "54",
-        0
-      ],
-      "image2": [
-        "35",
-        0
+      "images": [
+        [
+          "54",
+          0
+        ],
+        [
+          "35",
+          0
+        ]
       ]
     },
-    "class_type": "image concat mask",
+    "class_type": "easy imageListToImageBatch",
     "_meta": {
-      "title": "Image Concat with Mask"
+      "title": "Image List To Image Batch"
+    }
+  },
+  "60": {
+    "inputs": {
+      "images": [
+        "59",
+        0
+      ],
+      "mode": "horizontal"
+    },
+    "class_type": "easy joinImageBatch",
+    "_meta": {
+      "title": "Join Image Batch"
     }
   },
   "69": {
@@ -329,7 +344,7 @@
       "add_background": "none",
       "refine_foreground": true,
       "images": [
-        "59",
+        "60",
         0
       ]
     },
