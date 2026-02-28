@@ -179,10 +179,20 @@ def generate_story_prompt(request):
     # 2) Resolve characters and pick workflow
     characters  = prompt_json.get("characters", [])
     prompt_text = prompt_json.get("prompt")
-    anime_image = AnimeImage.objects.get(user=user)
 
     if not prompt_text:
         return Response({'error': 'Prompt missing from OpenAI response'}, status=500)
+
+    # Only need AnimeImage when the prompt uses 1 or 2 characters (background-only uses no character image)
+    anime_image = None
+    anime_tmp   = None
+    if len(characters) >= 1:
+        try:
+            anime_image = AnimeImage.objects.get(user=user)
+        except AnimeImage.DoesNotExist:
+            return Response({
+                'error': 'Create your character first. Go to the Character page, upload a photo, and confirm your anime character before generating panels with characters.',
+            }, status=400)
 
     using_s3 = bool(getattr(settings, "AWS_STORAGE_BUCKET_NAME", None))
     bucket   = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
@@ -194,10 +204,10 @@ def generate_story_prompt(request):
 
     tmp_files = []  # track temp files to clean up
 
-    # Download anime_image to a local temp file (S3-safe)
-    anime_tmp = _download_field_to_tmp(anime_image.anime_image)
-    tmp_files.append(anime_tmp)
-    _dbglog("views.py:generate_story_prompt:anime_tmp", "Downloaded anime image", {"path": anime_tmp})
+    if anime_image is not None:
+        anime_tmp = _download_field_to_tmp(anime_image.anime_image)
+        tmp_files.append(anime_tmp)
+        _dbglog("views.py:generate_story_prompt:anime_tmp", "Downloaded anime image", {"path": anime_tmp})
 
     # 3) Build subprocess command for the chosen workflow
     if len(characters) == 0:
