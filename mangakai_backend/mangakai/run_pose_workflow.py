@@ -11,6 +11,27 @@ import time as _time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+def _basename_any_sep(p: str) -> str:
+    # ComfyUI model dropdowns use basenames; workflows exported on Windows can contain backslashes/subfolders.
+    # Normalize both "foo/bar/baz" and "foo\\bar\\baz" to "baz".
+    if not isinstance(p, str):
+        return p
+    p = p.replace("\\", "/")
+    return p.split("/")[-1]
+
+def _normalize_controlnet_names(prompt: dict) -> None:
+    # Fix common workflow export issue: ControlNetLoader.inputs.control_net_name includes subfolders (e.g. "1.5\\file.safetensors")
+    for node in (prompt or {}).values():
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") != "ControlNetLoader":
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        if "control_net_name" in inputs:
+            inputs["control_net_name"] = _basename_any_sep(inputs["control_net_name"])
+
 def _dbglog(loc, msg, data=None):
     lp = os.path.join(BASE_DIR, "debug-3238e9.log")
     with open(lp, "a") as f:
@@ -148,6 +169,8 @@ workflow_path = os.path.join(BASE_DIR, "poses (1).json")
 _dbglog("run_pose_workflow.py:workflow_json", "Loading workflow", {"path": workflow_path, "exists": os.path.exists(workflow_path)})
 with open(workflow_path, "r", encoding="utf-8") as f:
     prompt = json.load(f)
+
+_normalize_controlnet_names(prompt)
 
 character_name = upload_image(args.character)
 pose_name_on_server = upload_image(args.pose)

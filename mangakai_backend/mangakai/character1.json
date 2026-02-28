@@ -80,7 +80,7 @@
   },
   "7": {
     "inputs": {
-      "control_net_name": "1.5\\control_v11p_sd15_openpose_fp16.safetensors"
+      "control_net_name": "control_v11p_sd15_openpose_fp16.safetensors"
     },
     "class_type": "ControlNetLoader",
     "_meta": {
