@@ -48,10 +48,16 @@ if not server_address.startswith(("http://", "https://")):
     raise ValueError(
         f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://"
     )
+# Avoid double slash in paths (e.g. ...runpod.net//upload/image -> 403)
+server_address = server_address.rstrip("/")
 
-# RunPod proxy auth (required when COMFYUI_URL is a RunPod proxy)
+# RunPod proxy: auth + browser-like headers (Cloudflare may block plain Python UA)
 _runpod_key = (os.getenv("RUNPOD_API_KEY") or "").strip()
-_comfy_headers = {}
+_comfy_headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 if _runpod_key:
     _comfy_headers["Authorization"] = f"Bearer {_runpod_key}"
     _dbglog("run_workflow.py:runpod", "RunPod API key set, adding Bearer header", {}, "H1")

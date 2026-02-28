@@ -40,9 +40,13 @@ if not server_address:
     raise RuntimeError("COMFYUI_URL environment variable is not set.")
 if not server_address.startswith(("http://", "https://")):
     raise ValueError(f"Invalid COMFYUI_URL '{server_address}'. Must start with http:// or https://")
+server_address = server_address.rstrip("/")
 
 _runpod_key = (os.getenv("RUNPOD_API_KEY") or "").strip()
-_comfy_headers = {}
+_comfy_headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+}
 if _runpod_key:
     _comfy_headers["Authorization"] = f"Bearer {_runpod_key}"
     _dbglog("run_panel_workflow2.py:runpod", "RunPod API key set", {})
