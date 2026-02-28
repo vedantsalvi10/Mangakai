@@ -76,6 +76,9 @@ const generatePoses = ()=>{
     <button className="bg-[#2f9e44] text-white border-white border-2 px-2 py:1 md:px-4 md:py-2 rounded-lg text-s md:text-md" onClick={() => router.push("/generatePanel")}>
       Panel
     </button>
+    <button className="bg-[#2f9e44] text-white border-white border-2 px-2 py:1 md:px-4 md:py-2 rounded-lg text-s md:text-md" onClick={() => router.push("/docs")}>
+      Doc
+    </button>
     <button className="bg-[#2f9e44] text-white border-white border-2 px-2 py:1 md:px-4 md:py-2 rounded-lg text-s md:text-md" onClick={handleLogout}>
       Logout
     </button>
