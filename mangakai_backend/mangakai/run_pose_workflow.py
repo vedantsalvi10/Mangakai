@@ -161,9 +161,17 @@ def get_images(ws, prompt):
                 break
 
     history = get_history(prompt_id)[prompt_id]
+    outputs = history.get('outputs', {})
+    _dbglog("run_pose_workflow.py:get_images:history", "History response", {
+        "history_keys": list(history.keys()),
+        "status": history.get("status"),
+        "messages": history.get("messages", [])[:5],
+        "output_node_ids": list(outputs.keys()),
+        "per_node": {nid: {"has_images": "images" in out, "image_count": len(out.get("images", []))} for nid, out in outputs.items()},
+    })
     output_images = {}
-    for node_id in history['outputs']:
-        node_output = history['outputs'][node_id]
+    for node_id in outputs:
+        node_output = outputs[node_id]
         images_output = []
         if 'images' in node_output:
             for image in node_output['images']:
